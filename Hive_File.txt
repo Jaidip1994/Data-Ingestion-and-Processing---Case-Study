@@ -13,21 +13,21 @@ DROP TABLE new_york_taxi;
 create external table if not exists new_york_taxi
 (
 VendorID int,
-tpep_pickup_datetime string, 
-tpep_dropoff_datetime string,
+tpep_pickup_datetime timestamp, 
+tpep_dropoff_datetime timestamp,
 Passenger_count int,
-Trip_distance double, 
-PULocationID string, 
-DOLocationID string,
+Trip_distance double,
 RateCodeID int, 
 Store_and_fwd_flag string, 
+PULocationID string, 
+DOLocationID string,
 Payment_type int,
 Fare_amount double, 
 Extra double,
 MTA_tax double,
-Improvement_surcharge double,
 Tip_amount double,
 Tolls_amount double,
+Improvement_surcharge double,
 Total_amount double)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
 location '/common_folder/nyc_taxi_data'
@@ -38,11 +38,11 @@ SELECT * from new_york_taxi limit 5;
 
 -- o/p: of the Query
 -- new_york_taxi.vendorid	new_york_taxi.tpep_pickup_datetime	new_york_taxi.tpep_dropoff_datetime	new_york_taxi.passenger_count	new_york_taxi.trip_distance	new_york_taxi.pulocationid	new_york_taxi.dolocationid	new_york_taxi.ratecodeid	new_york_taxi.store_and_fwd_flag	new_york_taxi.payment_type	new_york_taxi.fare_amount	new_york_taxi.extra	new_york_taxi.mta_tax	new_york_taxi.improvement_surcharge	new_york_taxi.tip_amount	new_york_taxi.tolls_amount	new_york_taxi.total_amount
--- 1	01-11-17 00:01	01-11-17 00:03	1	0.4	1	N	151	151	2	3.5	0.5	0.5	0	0	0.3	4.8
--- 2	01-11-17 00:31	01-11-17 00:31	1	0	1	N	193	193	2	2.5	0.5	0.5	0	0	0.3	3.8
--- 1	01-11-17 00:25	01-11-17 00:40	1	2.9	1	N	50	249	1	12.5	0.5	0.5	2.75	0	0.3	16.55
--- 1	01-11-17 00:17	01-11-17 00:30	1	3	1	N	79	230	1	11.5	0.5	0.5	2.55	0	0.3	15.35
--- 1	01-11-17 00:38	01-11-17 01:01	1	4.2	1	N	113	33	1	18.5	0.5	0.5	3.95	0	0.3	23.75
+-- 1	01-11-17 00:01:00.0	01-11-17 00:03:00.0	1	0.4	1	N	151	151	2	3.5	    0.5	0.5	0	    0	0.3	4.8
+-- 2	01-11-17 00:31:00.0	01-11-17 00:31:00.0	1	0	1	N	193	193	2	2.5	    0.5	0.5	0	    0	0.3	3.8
+-- 1	01-11-17 00:25:00.0	01-11-17 00:40:00.0	1	2.9	1	N	50	249	1	12.5	0.5	0.5	2.75	0	0.3	16.55
+-- 1	01-11-17 00:17:00.0	01-11-17 00:30:00.0	1	3	1	N	79	230	1	11.5	0.5	0.5	2.55	0	0.3	15.35
+-- 1	01-11-17 00:38:00.0	01-11-17 01:01:00.0	1	4.2	1	N	113	33	1	18.5	0.5	0.5	3.95	0	0.3	23.75
 
 
 
@@ -50,7 +50,7 @@ SELECT * from new_york_taxi limit 5;
 
 -- Part I :Basic Data Quality Checks
 -- 1. How many records has each TPEP provider provided? Write a query that summarises the number of records of each provider.
-SELECT VendorID , count(*) as no_of_record
+SELECT VendorID , count(*) as no_of_record 
 from new_york_taxi
 group by VendorID;
 
@@ -60,16 +60,18 @@ group by VendorID;
 -- 2	| 1	        | 527386
 -- So for Creative Mobile Technologies : 527386 ( No of Records ) and for VeriFone Inc. : 647183 (No of Records )
 
--- 2. The data provided is for months November and December only. Check whether the data is consistent, and if not, identify the data quality issues. Mention all data quality issues in comments.
 
+-- 2. The data provided is for months November and December only. Check whether the data is consistent, and if not, 
+-- identify the data quality issues. Mention all data quality issues in comments.
 -- Lets the Data Distribution based on Month and Year ( As this will help to partition the Data
+-- The data is for the two months Nov 2017 and Dec 2017
 SELECT 
-year(from_unixtime(unix_timestamp( tpep_pickup_datetime, 'yyyy-MM-dd HH:mm:ss'))) AS year_in_dat , 
-month(from_unixtime(unix_timestamp( tpep_pickup_datetime, 'yyyy-MM-dd HH:mm:ss'))) as month_in_dat,
+year(from_unixtime(unix_timestamp( tpep_pickup_datetime))) AS year_in_dat , 
+month(from_unixtime(unix_timestamp( tpep_pickup_datetime))) as month_in_dat,
 count(*) as Number_of_Records
 from new_york_taxi
-group by year(from_unixtime(unix_timestamp( tpep_pickup_datetime, 'yyyy-MM-dd HH:mm:ss'))),
-         month(from_unixtime(unix_timestamp( tpep_pickup_datetime, 'yyyy-MM-dd HH:mm:ss')));
+group by year(from_unixtime(unix_timestamp( tpep_pickup_datetime))),
+         month(from_unixtime(unix_timestamp( tpep_pickup_datetime)));
 
 -- o/p: of the Query         
 -- year_in_dat	month_in_dat	number_of_records
@@ -83,13 +85,116 @@ group by year(from_unixtime(unix_timestamp( tpep_pickup_datetime, 'yyyy-MM-dd HH
 -- 
 -- As we can see Below some Data are of year 2003, 2008, 2009 ( so these are the data which is not relevant for the current use case )
 -- But some data are also there of Oct 2017 and Jan 2018, this is like the Trip started around Midnight
+-- So lets Analyze some more Data where the Year is 2017 and month is 10 and year is 2018 and the month is 1
+-- Idea is get all the record whose pickup is at 31st Oct 2017 and 1st Jan 2018 and Drop off Time is in 31st October 2017 and
+-- Drop Off Time > 1st Jan 2018
+SELECT
+tpep_pickup_datetime ,
+tpep_dropoff_datetime
+FROM new_york_taxi
+WHERE ( year(from_unixtime(unix_timestamp( tpep_pickup_datetime))) == 2017 AND 
+        month(from_unixtime(unix_timestamp( tpep_pickup_datetime))) == 10 ) OR
+      ( year(from_unixtime(unix_timestamp( tpep_pickup_datetime))) == 2018 AND 
+        month(from_unixtime(unix_timestamp( tpep_pickup_datetime))) == 1 ) OR 
+      ( year(from_unixtime(unix_timestamp( tpep_dropoff_datetime))) == 2017 AND 
+        month(from_unixtime(unix_timestamp( tpep_dropoff_datetime))) == 10 ) OR
+      ( year(from_unixtime(unix_timestamp( tpep_dropoff_datetime))) == 2018 AND 
+        month(from_unixtime(unix_timestamp( tpep_dropoff_datetime))) == 1  AND day(from_unixtime(unix_timestamp( tpep_dropoff_datetime))) > 1 );    
+ORDER BY from_unixtime(unix_timestamp( tpep_pickup_datetime));
 
+-- As we can see below there are around 10 records, out of which for 6 records the pickup time is on 31st October 2017 and 4 records for whom the pickup time is  at 1st Jan 2018
+--  	tpep_pickup_datetime	tpep_dropoff_datetime
+-- 1	2017-10-31 11:23:00.0	2017-10-31 11:28:00.0
+-- 2	2017-10-31 18:33:00.0	2017-10-31 18:38:00.0
+-- 3	2017-10-31 18:56:00.0	2017-11-01 18:18:00.0
+-- 4	2017-10-31 23:59:00.0	2017-11-01 00:10:00.0
+-- 5	2017-10-31 23:59:00.0	2017-11-01 00:06:00.0
+-- 6	2017-10-31 23:59:00.0	2017-11-01 00:11:00.0
+-- 7	2018-01-01 00:00:00.0	2018-01-01 00:00:00.0
+-- 8	2018-01-01 00:00:00.0	2018-01-01 00:15:00.0
+-- 9	2018-01-01 00:00:00.0	2018-01-01 00:12:00.0
+-- 10	2018-01-01 00:04:00.0	2018-01-01 00:17:00.0
+-- So these records are also not valid
+
+-- So lets identify how many records are out of range 
+SELECT tpep_pickup_datetime, tpep_dropoff_datetime  
+FROM new_york_taxi
+WHERE NOT ( tpep_pickup_datetime BETWEEN '2017-11-01 00:00:00.0' AND '2017-12-31 23:59:59.0' AND 
+          tpep_dropoff_datetime BETWEEN '2017-11-01 00:00:00.0' AND '2018-01-01 23:59:59.0' )
+order by tpep_pickup_datetime, tpep_dropoff_datetime;
+
+-- o/p
+--  	tpep_pickup_datetime	tpep_dropoff_datetime
+-- 1	2003-01-01 00:58:00.0	2003-01-01 01:28:00.0
+-- 2	2008-12-31 10:27:00.0	2008-12-31 10:48:00.0
+-- 3	2008-12-31 23:53:00.0	2009-01-01 00:03:00.0
+-- 4	2009-01-01 00:13:00.0	2009-01-01 00:32:00.0
+-- 5	2017-10-31 11:23:00.0	2017-10-31 11:28:00.0
+-- 6	2017-10-31 18:33:00.0	2017-10-31 18:38:00.0
+-- 7	2017-10-31 18:56:00.0	2017-11-01 18:18:00.0
+-- 8	2017-10-31 23:59:00.0	2017-11-01 00:06:00.0
+-- 9	2017-10-31 23:59:00.0	2017-11-01 00:10:00.0
+-- 10	2017-10-31 23:59:00.0	2017-11-01 00:11:00.0
+-- 11	2017-11-14 13:50:00.0	2019-04-24 19:21:00.0
+-- 12	2018-01-01 00:00:00.0	2018-01-01 00:00:00.0
+-- 13	2018-01-01 00:00:00.0	2018-01-01 00:12:00.0
+-- 14	2018-01-01 00:00:00.0	2018-01-01 00:15:00.0
+-- 15	2018-01-01 00:04:00.0	2018-01-01 00:17:00.0
+-- Above are the records which are not in range out of that there is a peculiar record, 11th Record of the above output,
+-- where the droptime stamp is at 2019
+
+-- Lets see whether the dropofftime is less than pickup time or not
+SELECT count(*) as no_of_records 
+FROM new_york_taxi
+WHERE  tpep_dropoff_datetime < tpep_pickup_datetime;
+-- o/p
+--  	no_of_records
+-- 1	73
+-- Number of records are around 73 for which the drop off time is less than pickup time
+
+-- Lets check some more information
+SELECT * 
+FROM new_york_taxi
+WHERE  tpep_dropoff_datetime < tpep_pickup_datetime
+LIMIT 5;
+-- o/p
+--  	new_york_taxi.vendorid	new_york_taxi.tpep_pickup_datetime	new_york_taxi.tpep_dropoff_datetime	new_york_taxi.passenger_count	new_york_taxi.trip_distance	new_york_taxi.ratecodeid	new_york_taxi.store_and_fwd_flag	new_york_taxi.pulocationid	new_york_taxi.dolocationid	new_york_taxi.payment_type	new_york_taxi.fare_amount	new_york_taxi.extra	new_york_taxi.mta_tax	new_york_taxi.tip_amount	new_york_taxi.tolls_amount	new_york_taxi.improvement_surcharge	new_york_taxi.total_amount
+-- 1	1	2017-11-05 01:58:00.0	2017-11-05 01:02:00.0	1	0.3	1	N	264	264	1	4	0.5	0.5	1.05	0	0.3	6.35
+-- 2	1	2017-11-05 01:58:00.0	2017-11-05 01:10:00.0	1	2.1	1	N	234	48	1	10	0.5	0.5	2	0	0.3	13.3
+-- 3	1	2017-11-05 01:27:00.0	2017-11-05 01:09:00.0	2	15.7	1	N	140	14	2	47	0.5	0.5	0	0	0.3	48.3
+-- 4	1	2017-11-05 01:58:00.0	2017-11-05 01:14:00.0	1	3.3	1	N	249	142	1	13.5	0.5	0.5	2	0	0.3	16.8
+-- 5	1	2017-11-05 01:45:00.0	2017-11-05 01:27:00.0	1	9	1	N	148	61	1	33.5	0.5	0.5	8.7	0	0.3	43.5
+-- As we can see for the above records drop off time is less than pick up time
+-- Location is Changing
+-- Customer has also paid ( as we can see the total amount of paid )
+-- So these records looks has some fault
+
+-- Lets check out how many such records are there and for which vendor the most number of error data are present
+SELECT vendorid, count(*) no_of_records
+FROM new_york_taxi
+WHERE NOT ( tpep_pickup_datetime BETWEEN '2017-11-01 00:00:00.0' AND '2017-12-31 23:59:59.0' AND 
+          tpep_dropoff_datetime BETWEEN '2017-11-01 00:00:00.0' AND '2018-01-01 23:59:59.0' ) OR
+          tpep_dropoff_datetime < tpep_pickup_datetime
+GROUP BY vendorid;
+
+-- o/p
+--  	vendorid	no_of_records
+-- 1	2	        14
+-- 2	1	        74
+-- As we can see the number of record which are out of range is around 88 and for VendorID 1 most number of records are faulty
+
+ 
+--  3. You might have encountered unusual or erroneous rows in the dataset.
+--  Can you conclude which vendor is doing a bad job in providing the records using different columns of the dataset? 
+--  Summarise your conclusions based on every column where these errors are present. For example,  There are unusual 
+--  passenger count, i.e. 0 which is unusual
+ 
+-- Lets identify all the records which are out of range
 -- To Identify the Number of Null Data in the Dataset
 SELECT 
 SUM(IF(VendorID IS NULL,1,0)) AS VendorID,
 SUM(IF(tpep_pickup_datetime IS NULL,1,0)) AS tpep_pickup_datetime,
 SUM(IF(tpep_dropoff_datetime IS NULL,1,0)) AS dropoff_datetime,
-SUM(IF(tpep_pickup_datetime IS NULL,1,0)) AS tpep_pickup_datetime,
 SUM(IF(Passenger_count IS NULL,1,0)) AS Passenger_count,
 SUM(IF(Trip_distance IS NULL,1,0)) AS Trip_distance,
 SUM(IF(PULocationID IS NULL,1,0)) AS PULocationID,
@@ -110,6 +215,65 @@ from new_york_taxi;
 --  	vendorid	tpep_pickup_datetime	dropoff_datetime	tpep_pickup_datetime	passenger_count	trip_distance	pulocationid	dolocationid	ratecodeid	store_and_fwd_flag	payment_type	fare_amount	extra	mta_tax	improvement_surcharge	tip_amount	tolls_amount	total_amount
 -- 1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
 -- As we can see there are no null records
+
+-- Lets Identify the min and max of each columns and count for each features
+SELECT min(VendorID) as min_val, max(VendorID) as max_val, count(distinct VendorID) as count_val
+from new_york_taxi;
+
+SELECT min(tpep_pickup_datetime) as min_val, max(tpep_pickup_datetime) as max_val, count(distinct tpep_pickup_datetime) as count_val
+from new_york_taxi;
+
+SELECT min(tpep_dropoff_datetime) as min_val, max(tpep_dropoff_datetime) as max_val, count(distinct tpep_dropoff_datetime) as count_val
+from new_york_taxi;
+
+SELECT min(Passenger_count) as min_val, max(Passenger_count) as max_val, count(distinct Passenger_count) as count_val
+from new_york_taxi;
+
+SELECT min(Trip_distance) as min_val, max(Trip_distance) as max_val, count(distinct Trip_distance) as count_val
+from new_york_taxi;
+
+SELECT min(PULocationID) as min_val, max(PULocationID) as max_val, count(distinct PULocationID) as count_val
+from new_york_taxi;
+
+SELECT min(DOLocationID) as min_val, max(DOLocationID) as max_val, count(distinct DOLocationID) as count_val
+from new_york_taxi;
+
+SELECT min(RateCodeID) as min_val, max(RateCodeID) as max_val, count(distinct RateCodeID) as count_val
+from new_york_taxi;
+
+SELECT min(Store_and_fwd_flag) as min_val, max(Store_and_fwd_flag) as max_val, count(distinct Store_and_fwd_flag) as count_val
+from new_york_taxi;
+
+SELECT min(Payment_type) as min_val, max(Payment_type) as max_val, count(distinct Payment_type) as count_val
+from new_york_taxi;
+
+SELECT min(Fare_amount) as min_val, max(Fare_amount) as max_val, count(distinct Fare_amount) as count_val
+from new_york_taxi;
+
+SELECT min(Extra) as min_val, max(Extra) as max_val, count(distinct Extra) as count_val
+from new_york_taxi;
+
+SELECT min(MTA_tax) as min_val, max(MTA_tax) as max_val, count(distinct MTA_tax) as count_val
+from new_york_taxi;
+
+SELECT min(Improvement_surcharge) as min_val, max(Improvement_surcharge) as max_val, count(distinct Improvement_surcharge) as count_val
+from new_york_taxi;
+
+SELECT min(Tip_amount) as min_val, max(Tip_amount) as max_val, count(distinct Tip_amount) as count_val
+from new_york_taxi;
+
+SELECT min(Tolls_amount) as min_val, max(Tolls_amount) as max_val, count(distinct Tolls_amount) as count_val
+from new_york_taxi;
+
+SELECT min(Total_amount) as min_val, max(Total_amount) as max_val, count(distinct Total_amount) as count_val
+from new_york_taxi;
+
+
+
+
+
+
+
 
 --1. Compare the overall average fare per trip for November and December.
 
