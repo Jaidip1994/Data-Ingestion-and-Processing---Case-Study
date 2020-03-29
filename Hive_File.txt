@@ -182,6 +182,7 @@ GROUP BY vendorid;
 -- 1	2	        14
 -- 2	1	        74
 -- As we can see the number of record which are out of range is around 88 and for VendorID 1 most number of records are faulty
+-- So these records can be droppped
 
  
 --  3. You might have encountered unusual or erroneous rows in the dataset.
@@ -192,24 +193,24 @@ GROUP BY vendorid;
 -- Lets identify all the records which are out of range
 -- To Identify the Number of Null Data in the Dataset
 SELECT 
-SUM(IF(VendorID IS NULL,1,0)) AS VendorID,
-SUM(IF(tpep_pickup_datetime IS NULL,1,0)) AS tpep_pickup_datetime,
-SUM(IF(tpep_dropoff_datetime IS NULL,1,0)) AS dropoff_datetime,
-SUM(IF(Passenger_count IS NULL,1,0)) AS Passenger_count,
-SUM(IF(Trip_distance IS NULL,1,0)) AS Trip_distance,
-SUM(IF(PULocationID IS NULL,1,0)) AS PULocationID,
-SUM(IF(DOLocationID IS NULL,1,0)) AS DOLocationID,
-SUM(IF(RateCodeID IS NULL,1,0)) AS RateCodeID,
-SUM(IF(Store_and_fwd_flag IS NULL,1,0)) AS Store_and_fwd_flag,
-SUM(IF(Payment_type IS NULL,1,0)) AS Payment_type,
-SUM(IF(Fare_amount IS NULL,1,0)) AS Fare_amount,
-SUM(IF(Extra IS NULL,1,0)) AS Extra,
-SUM(IF(MTA_tax IS NULL,1,0)) AS MTA_tax,
-SUM(IF(Improvement_surcharge IS NULL,1,0)) AS Improvement_surcharge,
-SUM(IF(Tip_amount IS NULL,1,0)) AS Tip_amount,
-SUM(IF(Tolls_amount IS NULL,1,0)) AS Tolls_amount,
-SUM(IF(Total_amount IS NULL,1,0)) AS Total_amount
-from new_york_taxi;
+    SUM(IF(VendorID IS NULL,1,0)) AS VendorID,
+    SUM(IF(tpep_pickup_datetime IS NULL,1,0)) AS tpep_pickup_datetime,
+    SUM(IF(tpep_dropoff_datetime IS NULL,1,0)) AS dropoff_datetime,
+    SUM(IF(Passenger_count IS NULL,1,0)) AS Passenger_count,
+    SUM(IF(Trip_distance IS NULL,1,0)) AS Trip_distance,
+    SUM(IF(PULocationID IS NULL,1,0)) AS PULocationID,
+    SUM(IF(DOLocationID IS NULL,1,0)) AS DOLocationID,
+    SUM(IF(RateCodeID IS NULL,1,0)) AS RateCodeID,
+    SUM(IF(Store_and_fwd_flag IS NULL,1,0)) AS Store_and_fwd_flag,
+    SUM(IF(Payment_type IS NULL,1,0)) AS Payment_type,
+    SUM(IF(Fare_amount IS NULL,1,0)) AS Fare_amount,
+    SUM(IF(Extra IS NULL,1,0)) AS Extra,
+    SUM(IF(MTA_tax IS NULL,1,0)) AS MTA_tax,
+    SUM(IF(Improvement_surcharge IS NULL,1,0)) AS Improvement_surcharge,
+    SUM(IF(Tip_amount IS NULL,1,0)) AS Tip_amount,
+    SUM(IF(Tolls_amount IS NULL,1,0)) AS Tolls_amount,
+    SUM(IF(Total_amount IS NULL,1,0)) AS Total_amount
+FROM new_york_taxi;
 
 -- o/p
 --  	vendorid	tpep_pickup_datetime	dropoff_datetime	tpep_pickup_datetime	passenger_count	trip_distance	pulocationid	dolocationid	ratecodeid	store_and_fwd_flag	payment_type	fare_amount	extra	mta_tax	improvement_surcharge	tip_amount	tolls_amount	total_amount
@@ -219,30 +220,149 @@ from new_york_taxi;
 -- Lets Identify the min and max of each columns and count for each features
 SELECT min(VendorID) as min_val, max(VendorID) as max_val, count(distinct VendorID) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	1	2	2
+-- As we can see that there are only two values
 
-SELECT min(tpep_pickup_datetime) as min_val, max(tpep_pickup_datetime) as max_val, count(distinct tpep_pickup_datetime) as count_val
-from new_york_taxi;
-
-SELECT min(tpep_dropoff_datetime) as min_val, max(tpep_dropoff_datetime) as max_val, count(distinct tpep_dropoff_datetime) as count_val
-from new_york_taxi;
-
+-- Lets check with the Passenger Count Column
 SELECT min(Passenger_count) as min_val, max(Passenger_count) as max_val, count(distinct Passenger_count) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	0	9	10
+-- We can see above that the min passenger count is 0 and max passenger count is 9
+-- Lets check how many records are there for each Passenger Count
 
+SELECT Passenger_count, count(*) as no_of_records
+FROM new_york_taxi
+GROUP BY Passenger_count
+ORDER BY Passenger_count;
+-- o/p
+--  	passenger_count	no_of_records
+-- 1	0	            6824
+-- 2	1	            827499
+-- 3	2	            176872
+-- 4	3	            50693
+-- 5	4	            24951
+-- 6	5	            54568
+-- 7	6	            33146
+-- 8	7	            12
+-- 9	8	            3
+-- 10	9	            1
+
+-- Conclusion Driven: 
+-- 1. As it can be seen above that the there are some records which has Passenger Count as 0, there might be two reason
+--      a. The Driver was not interested to feed in some details regaeding the number of Passenger Onboard
+--      b. Or Someone just send some kind off item/parcell
+-- 2. As we can see most amount of records are between passenger count 0-6, but anything above 6 the records are very less. 
+--      a. So we can assume that the records entered were wrong, or really in some cars some more numbers of passenger onboard the cab because the cabs are big
+
+-- Lets identify which vendors are providing the wrong details, lets take the passenger count which is error is 0
+SELECT VendorID, Passenger_count, count(*) as no_of_records
+FROM new_york_taxi
+WHERE Passenger_count IN ( 0 , 7 , 8 , 9 )
+GROUP BY VendorID, Passenger_count
+ORDER BY Passenger_count;
+-- o/p
+--  	vendorid	passenger_count	no_of_records
+-- 1	1	        0	            6813
+-- 2	2	        0	            11
+-- 3	2	        7	            11
+-- 4	1	        7	            1
+-- 5	2	        8	            3
+-- 6	2	        9	            1
+-- VendorID 1 has has more number of records where the passenger count is 0 and For Vendor ID 2 very less amount of records has passenger count as 0( So these records we can drop )
+-- For the other passenger count > 6 which we can consider as the data points where the car was big
+
+-- Lets now check for Trip Distance  
 SELECT min(Trip_distance) as min_val, max(Trip_distance) as max_val, count(distinct Trip_distance) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	0	    126.41	3192
+-- As we can see the min value is 0 and max value is 126, so lets analyze some details about the trip distance is 0
 
-SELECT min(PULocationID) as min_val, max(PULocationID) as max_val, count(distinct PULocationID) as count_val
-from new_york_taxi;
+SELECT * from new_york_taxi WHERE Trip_distance == 0;
+-- o/p
+-- new_york_taxi.vendorid	new_york_taxi.tpep_pickup_datetime	new_york_taxi.tpep_dropoff_datetime	new_york_taxi.passenger_count	new_york_taxi.trip_distance	new_york_taxi.ratecodeid	new_york_taxi.store_and_fwd_flag	new_york_taxi.pulocationid	new_york_taxi.dolocationid	new_york_taxi.payment_type	new_york_taxi.fare_amount	new_york_taxi.extra	new_york_taxi.mta_tax	new_york_taxi.tip_amount	new_york_taxi.tolls_amount	new_york_taxi.improvement_surcharge	new_york_taxi.total_amount
+-- 2	2017-11-01 00:31:00.0	2017-11-01 00:31:00.0	1	0	1	N	193	193	2	2.5	0.5	0.5	0	0	0.3	3.8
+-- 1	2017-11-01 00:19:00.0	2017-11-01 00:19:00.0	1	0	1	N	13	13	4	2.5	0.5	0.5	0	0	0.3	3.8
+-- 1   2017-11-01 00:53:00.0	2017-11-01 00:54:00.0	1	0	1	N	48	48	3	3	0.5	0.5	0	0	0.3	4.3
+-- 2	2017-11-01 00:34:00.0	2017-11-01 00:34:00.0	2	0	1	N	144	144	3	-2.5	-0.5	-0.5	0	0	-0.3	-3.8
+-- 1	2017-11-01 01:24:00.0	2017-11-01 01:25:00.0	1	0	1	N	145	145	2	3	0.5	0.5	0	0	0.3	4.3
+-- As we can see the total amount is there, but as we can see that the location id is also not changing, but there are some records where the localtion ID is changing but still the Trip Distance is 0
 
-SELECT min(DOLocationID) as min_val, max(DOLocationID) as max_val, count(distinct DOLocationID) as count_val
-from new_york_taxi;
+-- Lets improve the query and identify which records are faulty
+SELECT tpep_pickup_datetime,tpep_dropoff_datetime  FROM new_york_taxi WHERE Trip_distance == 0 AND tpep_pickup_datetime != tpep_dropoff_datetime LIMIT 5;
+-- o/p
+--  	tpep_pickup_datetime	tpep_dropoff_datetime
+-- 1	2017-11-01 00:53:00.0	2017-11-01 00:54:00.0
+-- 2	2017-11-01 01:24:00.0	2017-11-01 01:25:00.0
+-- 3	2017-11-01 01:22:00.0	2017-11-01 01:23:00.0
+-- 4	2017-11-01 01:31:00.0	2017-11-01 01:39:00.0
+-- 5	2017-11-01 02:51:00.0	2017-11-01 02:52:00.0
+-- It might be possible that the Trip Distance is 0 because someone might have onboard the cab might have cancelled just after at the next min
 
+-- Lets improvise the Query based on PULocationID and DOLocationID , if they are not same then the cab was running and with Payment_type if it is Credit Card, Cash
+-- Credit Card in case someone has linked the Credit Card and as a Cancellation Fee and Cash in case Someone onboard the car and thought of cancelling because of some reason
+SELECT Payment_type, COUNT(*) as no_of_record FROM new_york_taxi WHERE Trip_distance == 0 AND DOLocationID != PULocationID AND Payment_type IN ( 1, 2 ) GROUP BY Payment_type;
+-- o/p
+--  	payment_type	no_of_record
+-- 1	2	            1315
+-- 2	1	            932
+-- As we can see the Location is changing and also the charge was deducted via Cash and Card
+
+-- Lets Identify which vendor is at fault
+SELECT VendorID, COUNT(*) as no_of_record FROM new_york_taxi 
+WHERE Trip_distance == 0 AND DOLocationID != PULocationID AND Payment_type IN ( 1, 2 ) 
+GROUP BY VendorID;
+-- o/p
+--  	vendorid	no_of_record
+-- 1	2	1066
+-- 2	1	1181
+-- As it can be seen that the both the vendors are at equal fault
+
+-- Lets Analyze RateCodeID
 SELECT min(RateCodeID) as min_val, max(RateCodeID) as max_val, count(distinct RateCodeID) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	1	99	7
+-- As it can be seen that there are 7 distinct value and the maximum is 99 but as the Data Dictionary there are only 6 category and 99 is not a valid category
 
+SELECT RateCodeID, count(*) as no_of_record
+FROM new_york_taxi
+GROUP BY RateCodeID 
+ORDER BY RateCodeID;
+-- o/p
+--  	ratecodeid	no_of_record
+-- 1	1	1142278
+-- 2	2	25338
+-- 3	3	2562
+-- 4	4	586
+-- 5	5	3793
+-- 6	6	3
+-- 7	99	9
+-- So we can see 9 records are there which are not valid, so lets analyze by vendor id
+SELECT VendorID, count(*) as no_of_record
+FROM new_york_taxi
+WHERE NOT RateCodeID BETWEEN 1 and 6
+GROUP BY VendorID;
+-- o/p
+--  	vendorid	no_of_record
+-- 1	2	1
+-- 2	1	8
+-- So for Vendor ID 1 most number of records are at fault, so we ignore this data points as they are faulty
+
+
+-- Lets Analyze Store_and_fwd_flag
 SELECT min(Store_and_fwd_flag) as min_val, max(Store_and_fwd_flag) as max_val, count(distinct Store_and_fwd_flag) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	N	Y	2
+-- So for this Feature the Data point looks good as there are only two types 
 
 SELECT min(Payment_type) as min_val, max(Payment_type) as max_val, count(distinct Payment_type) as count_val
 from new_york_taxi;
