@@ -46,8 +46,6 @@ SELECT * from new_york_taxi limit 5;
 
 
 
-
-
 -- Part I :Basic Data Quality Checks
 -- 1. How many records has each TPEP provider provided? Write a query that summarises the number of records of each provider.
 SELECT VendorID , count(*) as no_of_record 
@@ -395,11 +393,11 @@ FROM new_york_taxi;
 
 -- Lets Try to get the Percentile Values to see the Distribution, 0, 10, 25, 50, 75, 90, 100
 SELECT round(perc_val,2) as Percentile_val
-FROM (  SELECT explode(percentile_approx( Fare_amount, array(0.5, 0.1, 0.25, 0.75, 0.9, 0.99 ))) as perc_val
+FROM (  SELECT explode(percentile_approx( Fare_amount, array(0.05, 0.1, 0.25, 0.75, 0.9, 0.99 ))) as perc_val
         FROM new_york_taxi) temp_table;
 -- o/p
 --  	percentile_val
--- 1	9.39
+-- 1	4.31
 -- 2	4.94
 -- 3	6.41
 -- 4	14.5
@@ -433,38 +431,240 @@ ORDER BY Fare_amount LIMIT 10;
 -- -58.56
 -- -52
 -- -52
--- So these dat are clearly an outlier, so lets see which Vendor has provided these data and lets increase the limit from 1 to 100
 
+-- So these dat are clearly an outlier, so lets see which Vendor has provided these data and lets increase the limit from 1 to 100
 SELECT VendorID, count(*) as no_of_record
 FROM new_york_taxi
-WHERE NOT round(Fare_amount) between 1 and 100
+WHERE round(Fare_amount) < 0 OR ( round(Fare_amount) > 53 AND Trip_distance == 0 ) 
 GROUP BY VendorID;
 -- o/p
 --  	vendorid	no_of_record
--- 1	2	        1139
--- 2	1	        627
+-- 1	2	        1130
+-- 2	1	        205
 -- Here the Vendor ID 2 has most number of fault records
+-- Reason for the where Condition, the Fare Amount < 0 usually that is a wrong case
+-- And if the Fare is > 53 , there are two possible scenarios
+--      a. Sometimes the surcharge is huge or some factors are huge because of which the Fare is high ( travel at night/dawn, events, traffic time )
+--      b. But for all of the Trip_Distance can't be Zero, that's a faulty record
 
-
+-- Lets look for the Field Extra
 SELECT min(Extra) as min_val, max(Extra) as max_val, count(distinct Extra) as count_val
-from new_york_taxi;
+FROM new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	-10.6	4.8	14
 
+-- Lets check the Value Counts of Different Extra Values
+SELECT  Extra, count(*) as no_of_record
+FROM new_york_taxi
+GROUP BY Extra
+ORDER BY Extra;
+-- o/p
+--  	extra	no_of_record
+-- 1	-10.6	1
+-- 2	-4.5	5
+-- 3	-1	    87
+-- 4	-0.5	193
+-- 5	0	    631872
+-- 6	0.3	    36
+-- 7	0.5	    363455
+-- 8	0.8	    15
+-- 9	1	    174386
+-- 10	1.3	    13
+-- 11	1.5	    2
+-- 12	2	    1
+-- 13	4.5	    4502
+-- 14	4.8	    1
+-- As we can see there are Some Negative Value, As per the Data Dictionaly $0.05 and $0.01 are the rush hour Surcharges and rest all are midnight surcharge
+-- a. For -10.6 clearly that seems like a Manual Mistake
+-- b. For other negative values there exists some positive values so these also looks like a manual mistake , so only a sign change can be done on these values to rectify the same
+
+-- Lets Check which Vendor Has given most amount of faulty Records
+SELECT VendorID, count(*) as no_of_record
+FROM new_york_taxi
+WHERE Extra < 0
+GROUP BY VendorID;
+-- o/p
+--  	vendorid	no_of_record
+-- 1	2	        285
+-- 2	1	        1
+-- As we can see above for VendorID 2, most number number of Faulty records are present
+
+-- Lets Check for MTA_tax
 SELECT min(MTA_tax) as min_val, max(MTA_tax) as max_val, count(distinct MTA_tax) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	-0.5	11.4	5
+-- As per the Data Dictionary there is a $0.50 MTA tax that is automatically triggered based on the metered rate in use.
 
+-- Lets check the Value Counts
+SELECT MTA_tax, count(*) as no_of_records
+FROM new_york_taxi
+GROUP BY MTA_tax
+ORDER BY MTA_tax;
+-- o/p
+--  	mta_tax	no_of_records
+-- 1	-0.5	544
+-- 2	0	    5197
+-- 3	0.5	    1168824
+-- 4	3	    3
+-- 5	11.4	1
+-- As we can see above
+--  1. Only Two possible Values are possible 0/0.5
+--  2. -0.5 seems like a manual mistake for 0.5 ( So sign can be taken care of )
+--  3. 3 and 11.4 completely looks illogical here
+
+-- lets identify which Vendor is at fault here
+SELECT vendorid, count(*) as no_of_record
+FROM new_york_taxi
+WHERE MTA_tax NOT IN ( 0 , 0.5)
+GROUP BY VendorID;
+-- o/p
+--  	vendorid	no_of_record
+-- 1	2	        547
+-- 2	1	        1
+-- As we can see for VendorID 2 more number of records are faulty
+
+-- Lets Look for Improvement_surcharge
 SELECT min(Improvement_surcharge) as min_val, max(Improvement_surcharge) as max_val, count(distinct Improvement_surcharge) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	-0.3	1	4
+-- As per the data dictionary $0.30 improvement surcharge assessed trips at the flag drop, so lets Have Some more look on the data points
 
+-- Value Counts
+SELECT Improvement_surcharge,count(*) as no_of_record
+FROM new_york_taxi
+GROUP BY Improvement_surcharge
+ORDER by Improvement_surcharge;
+-- o/p
+--  	improvement_surcharge	no_of_record
+-- 1	-0.3	                558
+-- 2	0	                    287
+-- 3	0.3	                    1173720
+-- 4	1	                    4
+-- As it can be seen from above o/p
+--      a. 0 and 0.3 are the correct records
+--      b. -0.3 seems like a manual mistake in place of 0.3 they have wrongly inserted the data to that needs to be taken care of ( change of Sign )
+--      c. But 1 is clearly an error as per the data Dictionary
+SELECT vendorid, count(*) as no_of_record
+FROM new_york_taxi
+WHERE Improvement_surcharge NOT IN ( 0 , 0.3)
+GROUP BY VendorID;
+-- o/p
+--  	vendorid	no_of_record
+-- 1	2	562
+-- Vendor ID 2 has provided the faulty records in the current case
+
+-- Let check for Tip_amount
 SELECT min(Tip_amount) as min_val, max(Tip_amount) as max_val, count(distinct Tip_amount) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	-1.16	450	2133
+-- Here the Data Range looks quite Diverse, lets try to get all the percentile values
 
+SELECT round(perc_val,2) as Percentile_val
+FROM (  SELECT explode(percentile_approx( Tip_amount, array(0.05, 0.1, 0.25, 0.75, 0.9, 0.99 ))) as perc_val
+        FROM new_york_taxi) temp_table;
+-- o/p
+--  	percentile_val
+-- 1	-0.57
+-- 2	-0.47
+-- 3	-0.2
+-- 4	2.45
+-- 5	4.24
+-- 6	11.71
+-- As we can see till 25Percentile we have negative values, but as we know the tip amount can't be negative, putting aside those values lets identify the range
+
+SELECT round(perc_val,2) as Percentile_val
+FROM (  SELECT explode(percentile_approx( Tip_amount, array(0.5, 0.75, 0.9, 0.99 ))) as perc_val
+        FROM new_york_taxi WHERE Tip_amount >= 0 ) temp_table;
+-- o/p
+--  	percentile_val
+-- 1	1.35
+-- 2	2.45
+-- 3	4.24
+-- 4	11.71
+-- As we can see most of the data lie between the range 0 to 12, others are outliers, lets check how many such records are there. Negative values are possible to be a manual mistake
+
+SELECT Tip_amount, count(*) as no_records
+FROM new_york_taxi
+WHERE Tip_amount NOT BETWEEN 0 and 12  AND Payment_type != 1
+GROUP BY Tip_amount
+ORDER BY Tip_amount DESC; 
+-- o/p
+--  	tip_amount	no_records
+-- 1	-0.66	1
+-- 2	-0.82	1
+-- 3	-0.86	1
+-- 4	-1.16	1
+-- As the Tip Amount Can't be negative and also the Payment Type is from Credit Card only, so these are the faulty record
+-- And as a Tip Amount can be as large as possible so there we can't put any restrictions
+
+-- Lets check for which VendorID gave wrong data
+SELECT vendorid, count(*) as no_of_record
+FROM new_york_taxi
+WHERE Tip_amount NOT BETWEEN 0 and 12  AND Payment_type != 1
+GROUP BY VendorID;
+-- o/p
+--  	vendorid	no_of_record
+-- 1	2	        4
+-- For VendorID 2 more number number of records are faulty
+
+-- lets check for Tolls Amount
 SELECT min(Tolls_amount) as min_val, max(Tolls_amount) as max_val, count(distinct Tolls_amount) as count_val
 from new_york_taxi;
+-- o/p
+--   minimum    maximum    unique
+-- 1 -5.76    895.89    369
+-- There are some Negative Values
 
+SELECT round(perc_val,2) as Percentile_val
+FROM (  SELECT explode(percentile_approx( Tolls_amount, array(0.05, 0.1, 0.25, 0.75, 0.9, 0.99 ))) as perc_val
+       FROM new_york_taxi) temp_table;
+-- o/p
+--  	percentile_val
+-- 1	-5.46
+-- 2	-5.15
+-- 3	-4.24
+-- 4	-1.2
+-- 5	-0.29
+-- 6	5.76
+
+-- As it can be seen above that most of the records are negative only
+SELECT Tolls_amount, count(*)
+FROM new_york_taxi
+GROUP BY Tolls_amount
+ORDER BY Tolls_amount DESC; 
+
+
+SELECT VendorID, count(Tolls_amount)
+FROM new_york_taxi
+WHERE Tolls_amount < 5.76
+GROUP by VendorID;
+
+-- Lets Check for Total_amount       
 SELECT min(Total_amount) as min_val, max(Total_amount) as max_val, count(distinct Total_amount) as count_val
 from new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	-200.8	928.19	6115
 
-
+-- lets check the price distribution
+SELECT round(perc_val,2) as Percentile_val
+FROM (  SELECT explode(percentile_approx( Total_amount, array(0.05, 0.1, 0.25, 0.75, 0.9, 0.99 ))) as perc_val
+       FROM new_york_taxi) temp_table;
+-- o/p
+--  	percentile_val
+-- 1	5.79
+-- 2	6.79
+-- 3	8.74
+-- 4	17.8
+-- 5	30.06
+-- 6	70.27
 
 
 
