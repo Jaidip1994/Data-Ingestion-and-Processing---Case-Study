@@ -364,11 +364,87 @@ from new_york_taxi;
 -- 1	N	Y	2
 -- So for this Feature the Data point looks good as there are only two types 
 
+-- Lets analyze the Payment_type
 SELECT min(Payment_type) as min_val, max(Payment_type) as max_val, count(distinct Payment_type) as count_val
-from new_york_taxi;
+FROM new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	1	4	4
+-- As we can see there are only found kinds of Payment Type
 
+-- Lets check out all the types
+SELECT Payment_type, count(*) as no_of_record
+FROM new_york_taxi
+GROUP BY Payment_type
+ORDER BY Payment_type;
+-- o/p
+--  	payment_type	no_of_record
+-- 1	1	            790256
+-- 2	2	            376374
+-- 3	3	            6274
+-- 4	4	            1665
+-- As we can see there are records with only Payment Type from 1-4, so there is no fault in this Feature
+
+-- Lets Check the Fare_amount
 SELECT min(Fare_amount) as min_val, max(Fare_amount) as max_val, count(distinct Fare_amount) as count_val
-from new_york_taxi;
+FROM new_york_taxi;
+-- o/p
+--  	min_val	max_val	count_val
+-- 1	-200	650	    676
+-- As we can see the min amount is -200 and 650
+
+-- Lets Try to get the Percentile Values to see the Distribution, 0, 10, 25, 50, 75, 90, 100
+SELECT round(perc_val,2) as Percentile_val
+FROM (  SELECT explode(percentile_approx( Fare_amount, array(0.5, 0.1, 0.25, 0.75, 0.9, 0.99 ))) as perc_val
+        FROM new_york_taxi) temp_table;
+-- o/p
+--  	percentile_val
+-- 1	9.39
+-- 2	4.94
+-- 3	6.41
+-- 4	14.5
+-- 5	24.85
+-- 6	51.96
+-- As we can see above all the percentile value, the Fare_amount range
+
+-- Lets Identify the range of the data
+SELECT round(perc_val,2) as Percentile_val
+FROM (  SELECT explode(percentile_approx( Fare_amount, array(0.01 , 0.99))) as perc_val
+        FROM new_york_taxi ) temp_table;
+
+-- o/p        
+--  	percentile_val
+-- 1	3.26
+-- 2	51.96
+-- So Clearly -200 and 650 are outlier
+
+SELECT Fare_amount
+FROM new_york_taxi
+WHERE NOT Fare_amount between 3 and 52
+ORDER BY Fare_amount LIMIT 10;
+-- o/p
+-- fare_amount
+-- -200
+-- -175
+-- -115.55
+-- -90
+-- -79
+-- -73.11
+-- -58.56
+-- -52
+-- -52
+-- So these dat are clearly an outlier, so lets see which Vendor has provided these data and lets increase the limit from 1 to 100
+
+SELECT VendorID, count(*) as no_of_record
+FROM new_york_taxi
+WHERE NOT round(Fare_amount) between 1 and 100
+GROUP BY VendorID;
+-- o/p
+--  	vendorid	no_of_record
+-- 1	2	        1139
+-- 2	1	        627
+-- Here the Vendor ID 2 has most number of fault records
+
 
 SELECT min(Extra) as min_val, max(Extra) as max_val, count(distinct Extra) as count_val
 from new_york_taxi;
