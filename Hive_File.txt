@@ -786,54 +786,174 @@ GROUP BY vendorid;
 
 -- As we can see more number Vendor 2 have provided more number of wrong Data
 
--- You might have encountered unusual or erroneous rows in the dataset. Can you conclude which vendor is doing a bad job in providing 
+-- 3. You might have encountered unusual or erroneous rows in the dataset. Can you conclude which vendor is doing a bad job in providing 
 -- the records using different columns of the dataset? Summarise your conclusions based on every column where these errors are present. 
 -- For example,  There are unusual passenger count, i.e. 0 which is unusual.
 
 -- Conclusion
+-- a. tpep_pickup_datetime and tpep_pickup_datetime
+--      1. Data are provided of year 2003, 2008, 2009
+--      2. There was also a record whose dropoff time is in the year 2019
+--      3. There are some record where Dropoff Time < Pickup Time Time
+--      4. VendorID : 1 has more faulty record
 
+-- b. Passenger_count
+--      1. There were some passenger count as 0
+--          a. The Driver was not interested to feed in some details regaeding the number of Passenger Onboard
+--          b. Or Someone just send some kind off item/parcell
+--      2. As most number of records are between passenger count 0-6, but anything above 6 the records are very less. 
+--          a. So we can assume that the records entered were wrong, or really in some cars some more numbers of passenger onboard the cab because the cabs are big 
+--      3. VendorID 1 has more number of faulty records
 
+-- c. Trip_distance
+--      1. In case the Tripdistance was equal to zero, we can see the Location is changing and also the charge was deducted via Cash and Card
+--      2. VendorID 1 has more number number of Faulty record
+
+-- d. RateCodeID
+--      1.  9 records are there which are not valid for the RateCodeID 99
+--      2. Vendor ID 1 most number of records are at fault
+
+-- e. Fare_amount
+--      1. Here the Vendor ID 2 has most number of fault records
+--      2. Reason for the where Condition, the Fare Amount < 0 usually that is a wrong case
+--          And if the Fare is > 53 , there are two possible scenarios
+--              a. Sometimes the surcharge is huge or some factors are huge because of which the Fare is high ( travel at night/dawn, events, traffic time )
+--              b. But for all of the Trip_Distance can't be Zero, that's a faulty record
+
+--f. Extra
+--      1.  There are Some Negative Value, As per the Data Dictionaly $0.05 and $0.01 are the rush hour Surcharges and rest all are midnight surcharge
+--          a. For -10.6 clearly that seems like a Manual Mistake
+--          b. For other negative values there exists some positive values so these also looks like a manual mistake , so only a sign change can be done on these values to rectify the same
+--      2. For VendorID 2, most number number of Faulty records
+
+--g. MTA_tax
+--      1. Only Two possible Values are possible 0/0.5
+--      2. -0.5 seems like a manual mistake for 0.5 ( So sign can be taken care of )
+--      3. 3 and 11.4 completely looks illogical here
+--      4. VendorID 2 more number of records are faulty
+
+--h. Improvement_surcharge
+--      1. 0 and 0.3 are the correct records
+--      2. -0.3 seems like a manual mistake in place of 0.3 they have wrongly inserted the data to that needs to be taken care of ( change of Sign )
+--      3. But 1 is clearly an error as per the data Dictionary
+--      4. Vendor ID 2 has provided the faulty records
+
+--i. Tip_amount
+--      1. As the Tip Amount Can't be negative and also the Payment Type is from Credit Card only, so these are the faulty record
+--      2. And as a Tip Amount can be as large as possible so there we can't put any restrictions
+--      3. VendorID 2 more number number of records are faulty
+
+--j. Tolls_amount
+--      1. This had negative values, which looked liked a sign problem
+--      2. There are some trip distance and for 895.89, 200, 101.1 looks like a wrong data, as the trip distance were not so huge for the high Toll Amount
+--      3. Both the vendors looks like equally responsible
+
+--h. Total_amount
+--      1. Some record which are less than 0
+--      2. Some records were extremely high, but there exists only a few data points where total_amount > 200
+--      3. Vendor 2 have provided more number of Faulty Data
+
+-- |**********************************************************************************************************************************|
+-- Before answering the below questions, you need to create a clean, ORC partitioned table for analysis. Remove all the erroneous rows.
+-- |***********************************************************************************************************************************|
+
+DROP TABLE new_york_taxi_partitioned_orc;
+
+-- Then create external table
+create external table if not exists new_york_taxi_partitioned_orc
+    (VendorID int,
+    tpep_pickup_datetime timestamp,
+    tpep_dropoff_datetime timestamp,
+    Passenger_count int,
+    Trip_distance double,
+    RateCodeID int,
+    Store_and_fwd_flag string,
+    PULocationID string,
+    DOLocationID string,
+    Payment_type int,
+    Fare_amount double,
+    Extra double,
+    MTA_tax double,
+    Tip_amount double,
+    Tolls_amount double,
+    Improvement_surcharge double,
+    Total_amount double) partitioned by ( yr int, mnth int)
+STORED as orc 
+LOCATION '/user/hive/warehouse/sk_jg_case_study'
+TBLPROPERTIES ("orc.compress"="SNAPPY");
+
+INSERT OVERWRITE TABLE new_york_taxi_partitioned_orc PARTITION(yr, mnth)
+SELECT  *, 
+        year(from_unixtime(unix_timestamp( tpep_dropoff_datetime))) as yr,
+        month(from_unixtime(unix_timestamp( tpep_dropoff_datetime))) as mnth
+FROM new_york_taxi
+WHERE NOT ( NOT ( tpep_pickup_datetime BETWEEN '2017-11-01 00:00:00.0' AND '2017-12-31 23:59:59.0' AND 
+          tpep_dropoff_datetime BETWEEN '2017-11-01 00:00:00.0' AND '2018-01-01 23:59:59.0' ) OR
+          tpep_dropoff_datetime < tpep_pickup_datetime ) AND
+      Passenger_count NOT IN ( 0 , 7 , 8 , 9 ) AND
+      NOT ( Trip_distance == 0 AND DOLocationID != PULocationID AND Payment_type IN ( 1, 2 ) ) AND
+      RateCodeID BETWEEN 1 and 6 AND
+      NOT ( round(Fare_amount) < 0 OR ( round(Fare_amount) > 53 AND Trip_distance == 0 ) ) AND
+      Extra >= 0 AND
+      MTA_tax IN ( 0 , 0.5) AND
+      Improvement_surcharge IN ( 0 , 0.3) AND
+      NOT ( Tip_amount NOT BETWEEN 0 and 12  AND Payment_type != 1 ) AND
+      NOT ( Tolls_amount < 0 OR Tolls_amount >= 200 OR Tolls_amount ==  101.1 ) AND
+      NOT ( Total_amount < 0 OR Total_amount > 200 );
+      
+-- Old Table Record
+SELECT count ( *) as old_record FROM new_york_taxi;
+-- 1174569
+
+-- New Table Number of record
+SELECT count ( *) as new_record FROM new_york_taxi_partitioned_orc;
+-- 1164230
+
+SELECT round(((1174569 - 1164230) / 1174569) * 100);
+-- 10339 Records were deleted, 1% record were deleted
+
+-- Analysis-I
 --1. Compare the overall average fare per trip for November and December.
 
-select month(from_unixtime(unix_timestamp( tpep_pickup_datetime, 'yyyy-MM-dd HH:mm:ss'))) as mnth,
-avg(Total_amount) as avg_fare from new_york_taxi
-group by month(from_unixtime(unix_timestamp( tpep_pickup_datetime, 'yyyy-MM-dd HH:mm:ss')));
+select  month(from_unixtime(unix_timestamp( tpep_pickup_datetime))) as mnth,
+        round(avg(Total_amount),2) as avg_fare 
+from new_york_taxi_partitioned_orc
+group by month(from_unixtime(unix_timestamp( tpep_pickup_datetime)));
 
---  Month | Average Fare
--- 	12	  | 16.148044600224704
---  11	  | 16.446918576574948
+-- o/p
+--  	mnth	avg_fare
+-- 1	11	    16.38
+-- 2	12	    16.08
+-- Average Fare for December is less than November
 
 -- 2.Explore the ‘number of passengers per trip’ - 
 --   how many trips are made by each level of ‘Passenger_count’? Do most people travel solo or with other people?
-
-select Passenger_count, count(*) as trip_counts from new_york_taxi
+select Passenger_count, count(*) as trip_counts 
+from new_york_taxi_partitioned_orc
 group by Passenger_count
 order by trip_counts desc;
 
--- passenger_count||trip_counts
-    -- 1       	    827499
-    -- 2	        176872
-    -- 5	        54568
-    -- 3	        50693
-    -- 6	        33146
-    -- 4	        24951
-    -- 0	        6824
-    -- 7	        12
-
--- As we see most of the rides are taken by solo passengers.
+-- o/p
+--  	passenger_count	trip_counts
+-- 1	1	            824990
+-- 2	2	            176299
+-- 3	5	            54434
+-- 4	3	            50558
+-- 5	6	            33081
+-- 6	4	            24868
+-- As we see most of the rides are taken by solo passengers, least by more number od passenger
 
 -- 3. Which is the most preferred mode of payment?
-
-select Payment_type, count(Payment_type) as Counts from new_york_taxi
+select Payment_type, count(Payment_type) as Counts 
+from new_york_taxi_partitioned_orc
 group by Payment_type
 order by Counts desc;
-
--- payment_type || counts
---     1       	    790256
---     2	        376374
---     3	        6274
---     4	        1665
-
+- o/p
+--  	payment_type	counts
+-- 1	1	            784186
+-- 2	2	            372797
+-- 3	3	            5760
+-- 4	4	            1487
 -- We can see major transaction is done with the payment mode 1 i.e., Credit Card.
 
 -- 4. What is the average tip paid per trip? Compare the average tip with the 
@@ -841,20 +961,129 @@ order by Counts desc;
 -- of ‘tip amount paid’. Hint: You may use percentile_approx(DOUBLE col, p): 
 -- Returns an approximate pth percentile of a numeric column (including floating point types) in the group.
 
-select percentile_approx(Tip_amount, 0.25) as 25th_percentile,
-percentile_approx(Tip_amount, 0.50) as 50th_percentile,
-percentile_approx(Tip_amount, 0.75) as 75th_percentile
-from new_york_taxi
+select  round(avg(Tip_amount),2) as average, 
+        round(percentile_approx(Tip_amount, 0.25),2) as 25th_percentile,
+        round(percentile_approx(Tip_amount, 0.50),2) as 50th_percentile,
+        round(percentile_approx(Tip_amount, 0.75),2) as 75th_percentile
+from new_york_taxi_partitioned_orc;
+-- o/p
+--  	average	25th_percentile	50th_percentile	75th_percentile
+-- 1	1.85	0	            1.36	        2.45
+-- So as we can see the average tip paid per trip is not a representative statistic of ‘tip amount paid’
+--  1. As the Value lies between 50th and 75th Percentile
 
 -- 5. Explore the ‘Extra’ (charge) variable - what fraction of total trips have an extra charge is levied?
-with ft as (select VendorID,
-case when Extra > 0 then Extra end as charged,
-case when Extra = 0 then Extra end as not_charged
-from new_york_taxi)
 
-select count(charged) as charged, count(not_charged) not_charged, 
-count(charged)/(count(charged) + count(not_charged)) as fraction
+with ft as (
+            select VendorID,
+                case when Extra > 0 then Extra end as charged,
+                case when Extra = 0 then Extra end as not_charged
+            from new_york_taxi_partitioned_orc)
+
+select  count(charged) as charged, 
+        count(not_charged) not_charged, 
+        round(count(charged)*100/(count(charged) + count(not_charged)),2) as fraction
 from ft;
+-- o/p
+--  	charged	not_charged	fraction
+-- 1	538767	625463	    46.28
+-- So as we can see above around 46.28% of total trips have an extra charge levied
 
--- charged | not_charged    | fraction
--- 542411  	 631872	          0.4619082452866983
+-- Analysis-II
+
+-- What is the correlation between the number of passengers on any given trip, and the tip paid per trip? 
+-- Do multiple travellers tip more compared to solo travellers? Hint: Use CORR(Col_1, Col_2)
+
+SELECT round( corr(Passenger_count,tip_amount),5)  as correlation
+FROM new_york_taxi_partitioned_orc;
+-- o/p
+--  	correlation
+-- 1	-0.00463
+
+-- As it can be seen that the correleation value is negative and very small, so there is so strong correlation between PassengerCount and TipAmount
+
+SELECT round(corr( single_pas, tip_amount ),5) as correlation
+       FROM ( SELECT CASE WHEN Passenger_count == 1 then 1
+                          ELSE 0 END as single_pas , tip_amount
+              FROM new_york_taxi_partitioned_orc
+            ) temp_table;
+-- o/p
+--  	correlation
+-- 1	0.00496
+-- There is a very low positive correlation between single vs mutlple passenger count ( tip amount )
+
+SELECT single_pas as passenger_type, round(avg(tip_amount ),2) as average
+       FROM ( SELECT CASE WHEN Passenger_count == 1 then 'Solo'
+                          ELSE 'Multiple' END as single_pas , tip_amount
+              FROM new_york_taxi_partitioned_orc
+            ) temp_table
+        GROUP BY single_pas;
+        
+-- o/p
+--  	passenger_type	average
+-- 1	Multiple	    1.83
+-- 2	Solo	        1.86
+-- As we can see Multiple Passenger traveller tip less compared to Single Passenger
+
+--2. Segregate the data into five segments of ‘tip paid’: [0-5), [5-10), [10-15) , [15-20) and >=20. Calculate the percentage share of each bucket (i.e. the fraction of trips falling in each bucket).
+
+SELECT range_of_tip, round((count(*)*100/1164230),2) as percentage
+FROM 
+( SELECT 
+    CASE when ( tip_amount >= 0 and tip_amount < 5 ) then   '[0-5)'
+         when ( tip_amount >= 5 and tip_amount < 10 ) then  '[5-10)'
+         when ( tip_amount >= 10 and tip_amount < 15 ) then  '[10-15)'
+         when ( tip_amount >= 15 and tip_amount < 20 ) then  '[15-20)'
+         when ( tip_amount >= 20 ) then '>=20' END range_of_tip
+    FROM new_york_taxi_partitioned_orc) temp_table
+GROUP BY range_of_tip
+ORDER BY percentage DESC;
+-- o/p
+--  	range_of_tip	percentage
+-- 1	[0-5)	        92.15
+-- 2	[5-10)	        5.65
+-- 3	[10-15)	        1.87
+-- 4	[15-20)	        0.23
+-- 5	>=20	        0.09
+-- Highest Number of tip happened in the group [0-5) around 92% and least tip happened in the grp >=20 ~1%
+
+-- 3. Which month has a greater average ‘speed’ - November or December? Note that the variable ‘speed’ will have to be derived from other metrics. Hint: You have columns for distance and time.
+SELECT mnth , 
+    round(avg(Trip_distance/((unix_timestamp(tpep_dropoff_datetime)-unix_timestamp(tpep_pickup_datetime) )/3600) ),3) average_speed
+FROM new_york_taxi_partitioned_orc
+GROUP BY mnth
+ORDER BY average_speed DESC;
+-- o/p
+--  	mnth	average_speed
+-- 1	12	    11.074
+-- 2	11	    10.987
+-- 3	1	    9.853
+-- As we can see the December has the highest average Speed as compared to other months
+
+-- 4.Analyse the average speed of the most happening days of the year, i.e. 31st December (New year’s eve) and 25th December (Christmas) and compare it with the overall average.
+
+-- Lets Check the Average speed on Christmae, Newyear and other days
+with ft as
+(   select trip_distance,   tpep_dropoff_datetime,  tpep_pickup_datetime,
+        case    when ((tpep_pickup_datetime>='2017-12-25 00:00:00.0' and tpep_pickup_datetime<'2017-12-26 00:00:00.0')) then 'christmas'
+                when ((tpep_pickup_datetime>='2017-12-31 00:00:00.0' and tpep_pickup_datetime<'2018-01-01 00:00:00.0')) then 'new_years' else 'regular_days' end as DayType
+        from new_york_taxi_partitioned_orc
+)
+select DayType, round(avg(trip_distance/((unix_timestamp(tpep_dropoff_datetime) - unix_timestamp(tpep_pickup_datetime))/3600)),2) as average_speed
+from ft
+group by DayType;
+-- o/p
+--  	daytype	        average_speed
+-- 1	christmas	    15.24
+-- 2	new_years	    13.22
+-- 3	regular_days	10.97
+
+-- As we can see the Average Speed on Chistmas is higher than other three days
+
+-- Now lets gets the overall average speed
+select round(avg(trip_distance/((unix_timestamp(tpep_dropoff_datetime)-unix_timestamp(tpep_pickup_datetime) )/3600) ),3) average_speed
+from new_york_taxi_partitioned_orc;
+-- o/p
+--  	average_speed
+-- 1	11.031
+-- As we can see above on the Holiday's specially on NewYear /Christmas, the speed is higher as compared to average speed, As the possible reason is the streets are more empty than normal days
