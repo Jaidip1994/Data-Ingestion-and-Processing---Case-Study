@@ -634,17 +634,93 @@ FROM (  SELECT explode(percentile_approx( Tolls_amount, array(0.05, 0.1, 0.25, 0
 -- 5	-0.29
 -- 6	5.76
 
--- As it can be seen above that most of the records are negative only
-SELECT Tolls_amount, count(*)
+-- As it can be seen above that most of the records are below 5.76, lets identify the count
+-- As we can see the approximate values are between 
+
+SELECT Tolls_amount, count(*) as no_of_records
 FROM new_york_taxi
 GROUP BY Tolls_amount
-ORDER BY Tolls_amount DESC; 
+HAVING count(*) > 100 
+ORDER BY Tolls_amount DESC;
+-- o/p
+--  	tolls_amount	no_of_records
+-- 1	17.5	        160
+-- 2	15.5	        122
+-- 3	12.5	        627
+-- 4	11.52	        275
+-- 5	10.5	        983
+-- 6	5.76	        56086
+-- 7	5.54	        379
+-- 8	2.64	        560
+-- 9	0	            1113349
+
+-- As we can see there are large number of data at 5.76 & 0, that's why the percentile approx is coming like this 
+-- Lets Try to check the extreme case and the minimum case
+-- Minimum case ( If the value is less than 0 )
+
+-- Lets check how many records are there below zero
+SELECT `bucket` , count(*) as no_of_record 
+FROM ( SELECT CASE
+        WHEN Tolls_amount < 0 THEN 1
+        WHEN ( Tolls_amount >= 0 and Tolls_amount < 50 ) THEN 2
+        WHEN ( Tolls_amount >= 50 and Tolls_amount < 100 ) THEN 3
+        WHEN ( Tolls_amount >= 100 and Tolls_amount < 150 ) THEN 4
+        WHEN ( Tolls_amount >= 150 and Tolls_amount < 200 ) THEN 5
+        else 6 end `bucket`
+FROM new_york_taxi ) temp_table
+GROUP BY `bucket`
+ORDER BY `bucket`;
+-- o/p
+--  	bucket	no_of_record
+-- 1	1	3
+-- 2	2	1174544
+-- 3	3	18
+-- 4	4	2
+-- 5	6	2
+
+-- As we can see above what we tried to do is bucket/bin the data in some bracket,
+-- so th brackets where if less 0 ==> 1, if between 0 and 50 then ==> 2, if between 50 and 100 then ==> 3, if between 100 and 150 then ==> 4 and if betwen 150 and 200 ==> 5 and rest as 6
+-- So we can see above there are very less record which is negative and which are above 150, lets try to have a look on those values
 
 
-SELECT VendorID, count(Tolls_amount)
+SELECT Tolls_amount, count(*) as number_of_record 
 FROM new_york_taxi
-WHERE Tolls_amount < 5.76
-GROUP by VendorID;
+WHERE Tolls_amount < 0 or Tolls_amount >= 100
+GROUP BY Tolls_amount
+ORDER BY Tolls_amount DESC ; 
+-- o/p
+--  	tolls_amount	number_of_record
+-- 1	895.89	        1
+-- 2	200	            1
+-- 3	125.76	        1
+-- 4	101.1	        1
+-- 5	-5.76	        3
+-- As we can see for the Numbers like 200 and 895.89 looks like a manual mistake because they are extremely high, but for 5.76 this is a sign problem 
+-- For 125.76 and 101.1 they doesn't look like a madeup number
+-- Lets try to have a look for >100 tolls amount data and understand some key things 
+
+SELECT trip_distance, Tolls_amount  FROM new_york_taxi WHERE Tolls_amount > 100 OR Tolls_amount < 0
+ORDER BY Tolls_amount DESC;
+-- o/p
+--  	trip_distance	tolls_amount
+-- 1	9.2	            895.89
+-- 2	16.8	        200
+-- 3	25.4	        125.76
+-- 4	0	            101.1
+-- 5	0.22	        -5.76
+-- 6	0.05	        -5.76
+-- 7	0.03	        -5.76
+-- As we can see these are the trip distance and for 895.89, 200, 101.1 looks like a wrong data and for -5.76 this also looks like a sign problem
+
+SELECT vendorid, count(*) as number_of_record 
+FROM new_york_taxi
+WHERE Tolls_amount < 0 OR Tolls_amount >= 200 OR Tolls_amount ==  101.1
+GROUP BY vendorid; 
+-- o/p
+--  	vendorid	number_of_record
+-- 1	2	        3
+-- 2	1	        3
+-- Both the vendors looks like equally responsible
 
 -- Lets Check for Total_amount       
 SELECT min(Total_amount) as min_val, max(Total_amount) as max_val, count(distinct Total_amount) as count_val
@@ -666,9 +742,55 @@ FROM (  SELECT explode(percentile_approx( Total_amount, array(0.05, 0.1, 0.25, 0
 -- 5	30.06
 -- 6	70.27
 
+-- This shows the approx percentile distribution, but as we can see the min and max are quite far , i.e the range is quite high, so lets idenitfy what are the anomaly data
+-- lets check how many negative records are there
 
+SELECT count(*) as number_of_record
+FROM new_york_taxi
+WHERE Total_amount < 0;
 
+-- o/p
+--  	number_of_record
+-- 1	558
+-- There are some record which are less than 0 so we need to handle these record, these are wrong data
 
+-- And lets check the outliers on the upper bound
+SELECT `bucket` , count(*) as no_of_record 
+FROM ( SELECT CASE
+        WHEN Total_amount < 0 THEN 1
+        WHEN ( Total_amount >= 0 and Tolls_amount < 100 ) THEN 2
+        WHEN ( Total_amount >= 100 and Tolls_amount < 200 ) THEN 3
+        WHEN ( Total_amount >= 200 and Tolls_amount < 350 ) THEN 4
+        WHEN ( Total_amount >= 300 and Tolls_amount < 400 ) THEN 5
+        else 6 end `bucket`
+FROM new_york_taxi ) temp_table
+GROUP BY `bucket`
+ORDER BY `bucket`;
+-- o/p
+--  	bucket	no_of_record
+-- 1	1	    558
+-- 2	2	    1174007
+-- 3	3   	2
+-- 4	4	    1
+-- 5	6	    1
+-- As we can see above there are around 4 data points which has total amount > 200
+
+SELECT vendorid, count(*) as number_of_record 
+FROM new_york_taxi
+WHERE Total_amount < 0 OR Total_amount > 200
+GROUP BY vendorid; 
+-- o/p
+--  	vendorid	number_of_record
+-- 1	2	668
+-- 2	1	59
+
+-- As we can see more number Vendor 2 have provided more number of wrong Data
+
+-- You might have encountered unusual or erroneous rows in the dataset. Can you conclude which vendor is doing a bad job in providing 
+-- the records using different columns of the dataset? Summarise your conclusions based on every column where these errors are present. 
+-- For example,  There are unusual passenger count, i.e. 0 which is unusual.
+
+-- Conclusion
 
 
 --1. Compare the overall average fare per trip for November and December.
